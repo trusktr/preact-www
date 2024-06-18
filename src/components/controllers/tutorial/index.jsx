@@ -21,6 +21,8 @@ import { useLanguage } from '../../../lib/i18n';
 import { Splitter } from '../../splitter';
 import config from '../../../config.json';
 import { MarkdownRegion } from '../markdown-region';
+import CodeEditor from '../../code-editor';
+import Runner from '../repl/runner';
 
 const TUTORIAL_COMPONENTS = {
 	pre: TutorialCodeBlock,
@@ -80,18 +82,10 @@ export class Tutorial extends Component {
 	}
 
 	componentDidMount() {
-		Promise.all([
-			import(/* webpackChunkName: "editor" */ '../../code-editor'),
-			import(/* webpackChunkName: "runner" */ '../repl/runner')
-		]).then(([CodeEditor, Runner]) => {
-			this.CodeEditor = CodeEditor.default;
-			this.Runner = Runner.default;
-
-			// Load transpiler
-			this.Runner.worker.ping().then(() => {
-				this.setState({
-					loading: false
-				});
+		// Load transpiler
+		Runner.worker.ping().then(() => {
+			this.setState({
+				loading: false
 			});
 		});
 	}
@@ -134,15 +128,14 @@ export class Tutorial extends Component {
 		this.setState({ error: null });
 	};
 
-	render({ html, meta, loading }, { code, error }) {
+	render({ html, meta, loading: routerLoading }, { code, error, loading: tutorialLoading }) {
 		const state = {
 			html,
 			meta,
-			loading,
+			routerLoading,
+			tutorialLoading,
 			code,
-			error,
-			Runner: this.Runner,
-			CodeEditor: this.CodeEditor
+			error
 		};
 		return (
 			<TutorialContext.Provider value={this}>
@@ -155,11 +148,10 @@ export class Tutorial extends Component {
 function TutorialView({
 	html,
 	meta,
-	loading,
+	routerLoading,
+	tutorialLoading,
 	code,
 	error,
-	Runner,
-	CodeEditor,
 	clearError
 }) {
 	const content = useRef(null);
@@ -175,14 +167,14 @@ function TutorialView({
 	const solvable = meta.solvable === true;
 	const hasCode = meta.code !== false;
 	const showCode = showCodeOverride && hasCode;
-	const initialLoad = !html || !Runner || !CodeEditor;
+	const initialLoad = !html;
 
 	// Scroll to the top after loading
 	useEffect(() => {
-		if (!loading && !initialLoad) {
+		if (!routerLoading && !initialLoad) {
 			content.current.scrollTo(0, 0);
 		}
-	}, [path, loading, initialLoad]);
+	}, [path, routerLoading, initialLoad]);
 
 	const reRun = useCallback(() => {
 		let code = tutorial.state.code;
@@ -193,7 +185,7 @@ function TutorialView({
 
 	return (
 		<ReplWrapper
-			loading={loading}
+			tutorialLoading={tutorialLoading}
 			initialLoad={initialLoad}
 			solvable={solvable}
 			solved={solved}
@@ -250,7 +242,7 @@ function TutorialView({
 						}
 					>
 						<div class={style.codeWindow}>
-							{!initialLoad && (
+							{!initialLoad && code && (
 								<CodeEditor
 									key="editor"
 									class={style.code}
@@ -318,7 +310,7 @@ const REPL_CSS = `
 `;
 
 function ReplWrapper({
-	loading,
+	tutorialLoading,
 	solvable,
 	solved,
 	initialLoad,
@@ -327,7 +319,7 @@ function ReplWrapper({
 }) {
 	return (
 		<div class={style.tutorial}>
-			<loading-bar showing={!!loading} />
+			<loading-bar showing={!!tutorialLoading} />
 			<style>{REPL_CSS}</style>
 			<div
 				class={cx(
@@ -343,7 +335,7 @@ function ReplWrapper({
 			<div
 				class={cx(
 					style.loadingOverlay,
-					typeof window !== 'undefined' && loading && style.loading
+					typeof window !== 'undefined' && tutorialLoading && style.loading
 				)}
 			>
 				<h4>Loading...</h4>
@@ -353,6 +345,8 @@ function ReplWrapper({
 }
 
 /** Handles all code blocks (and <pre>'s) in tutorial markup */
+// TODO: Move this into meta data, parse it out AOT. We don't need
+// to do this on the client.
 function TutorialCodeBlock(props) {
 	const tutorial = useContext(TutorialContext);
 	const child = [].concat(props.children)[0];

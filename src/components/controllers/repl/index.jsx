@@ -4,6 +4,9 @@ import { debounce } from 'decko';
 import { ErrorOverlay } from './error-overlay';
 import { localStorageGet, localStorageSet } from '../../../lib/localstorage';
 import { parseStackTrace } from './errors';
+import { Splitter } from '../../splitter';
+import CodeEditor from '../../code-editor';
+import Runner from './runner';
 import style from './style.module.css';
 import REPL_CSS from './examples.css?raw';
 
@@ -14,7 +17,6 @@ import todoExampleSignal from './examples/todo-list-signal.txt?url';
 import repoListExample from './examples/github-repo-list.txt?url';
 import contextExample from './examples/context.txt?url';
 import spiralExample from './examples/spiral.txt?url';
-import { Splitter } from '../../splitter';
 
 const EXAMPLES = [
 	{
@@ -111,26 +113,17 @@ export class Repl extends Component {
 	}
 
 	componentDidMount() {
-		Promise.all([
-			import('../../code-editor'),
-			import('./runner')
-		]).then(([CodeEditor, Runner]) => {
-			this.CodeEditor = CodeEditor.default;
-			this.Runner = Runner.default;
-
-			// Load transpiler
-			this.setState({ loading: 'Initializing REPL...' });
-			this.Runner.worker.ping().then(() => {
-				this.setState({ loading: false });
-				let example = this.state.exampleSlug;
-				if (this.props.query.code) {
-					this.receiveCode(this.props.query.code);
-				} else if (example) {
-					this.applyExample(example);
-				} else if (!this.state.code) {
-					this.applyExample(EXAMPLES[0].slug);
-				}
-			});
+		// Load transpiler
+		Runner.worker.ping().then(() => {
+			this.setState({ loading: false });
+			let example = this.state.exampleSlug;
+			if (this.props.query.code) {
+				this.receiveCode(this.props.query.code);
+			} else if (example) {
+				this.applyExample(example);
+			} else if (!this.state.code) {
+				this.applyExample(EXAMPLES[0].slug);
+			}
 		});
 	}
 
@@ -194,8 +187,6 @@ export class Repl extends Component {
 		if (this.state.exampleSlug) {
 			const example = getExample(this.state.exampleSlug, EXAMPLES);
 			if (code !== example.code && this.state.exampleSlug !== '') {
-				// eslint-disable-next-line react/no-did-update-set-state
-				this.setState({ exampleSlug: '' });
 				history.replaceState(null, null, '/repl');
 			}
 		}
@@ -282,7 +273,7 @@ export class Repl extends Component {
 										stack={parseStackTrace(error)}
 									/>
 								)}
-								<this.Runner
+								<Runner
 									onRealm={this.onRealm}
 									onError={linkState(this, 'error', 'error')}
 									onSuccess={this.onSuccess}
@@ -292,9 +283,10 @@ export class Repl extends Component {
 							</div>
 						}
 					>
-						<this.CodeEditor
+						<CodeEditor
 							class={style.code}
 							value={code}
+							baseExampleSlug={exampleSlug}
 							error={error}
 							onInput={linkState(this, 'code', 'value')}
 						/>
