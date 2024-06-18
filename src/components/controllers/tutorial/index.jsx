@@ -21,8 +21,6 @@ import { useLanguage } from '../../../lib/i18n';
 import { Splitter } from '../../splitter';
 import config from '../../../config.json';
 import { MarkdownRegion } from '../markdown-region';
-import CodeEditor from '../../code-editor';
-import Runner from '../repl/runner';
 
 const TUTORIAL_COMPONENTS = {
 	pre: TutorialCodeBlock,
@@ -82,10 +80,18 @@ export class Tutorial extends Component {
 	}
 
 	componentDidMount() {
-		// Load transpiler
-		Runner.worker.ping().then(() => {
-			this.setState({
-				loading: false
+		Promise.all([
+			import('../../code-editor'),
+			import('../repl/runner')
+		]).then(([CodeEditor, Runner]) => {
+			this.CodeEditor = CodeEditor.default;
+			this.Runner = Runner.default;
+
+			// Load transpiler
+			this.Runner.worker.ping().then(() => {
+				this.setState({
+					loading: false
+				});
 			});
 		});
 	}
@@ -135,7 +141,9 @@ export class Tutorial extends Component {
 			routerLoading,
 			tutorialLoading,
 			code,
-			error
+			error,
+			Runner: this.Runner,
+			CodeEditor: this.CodeEditor
 		};
 		return (
 			<TutorialContext.Provider value={this}>
@@ -152,6 +160,8 @@ function TutorialView({
 	tutorialLoading,
 	code,
 	error,
+	Runner,
+	CodeEditor,
 	clearError
 }) {
 	const content = useRef(null);
@@ -167,7 +177,7 @@ function TutorialView({
 	const solvable = meta.solvable === true;
 	const hasCode = meta.code !== false;
 	const showCode = showCodeOverride && hasCode;
-	const initialLoad = !html;
+	const initialLoad = !html || !Runner || !CodeEditor;
 
 	// Scroll to the top after loading
 	useEffect(() => {
@@ -345,8 +355,6 @@ function ReplWrapper({
 }
 
 /** Handles all code blocks (and <pre>'s) in tutorial markup */
-// TODO: Move this into meta data, parse it out AOT. We don't need
-// to do this on the client.
 function TutorialCodeBlock(props) {
 	const tutorial = useContext(TutorialContext);
 	const child = [].concat(props.children)[0];
