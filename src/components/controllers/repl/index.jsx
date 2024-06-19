@@ -193,6 +193,8 @@ export class Repl extends Component {
 		if (this.state.exampleSlug) {
 			const example = getExample(this.state.exampleSlug, EXAMPLES);
 			if (code !== example.code && this.state.exampleSlug !== '') {
+				// eslint-disable-next-line react/no-did-update-set-state
+				this.setState({ exampleSlug: '' });
 				history.replaceState(null, null, '/repl');
 			}
 		}
